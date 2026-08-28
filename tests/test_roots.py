@@ -7,8 +7,6 @@ from radiax import roots
 from .testsets import KNOWN_ROOTS, RANDOM_CUBICS
 from .utils import assert_roots_match
 
-jax.config.update("jax_enable_x64", True)
-
 
 @pytest.mark.parametrize(("p", "expected"), KNOWN_ROOTS)
 @pytest.mark.parametrize(
