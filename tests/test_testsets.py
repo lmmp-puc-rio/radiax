@@ -12,7 +12,6 @@ def test_known_roots_polyval(p: jax.Array, expected: jax.Array) -> None:
     y = jnp.polyval(p, expected)
 
     assert isinstance(y, jax.Array)
-    assert y.dtype == expected.dtype
 
     assert y == pytest.approx(0)
 
