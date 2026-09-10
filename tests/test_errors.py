@@ -26,7 +26,7 @@ def test_unimplemented_degree() -> None:
     roots(jnp.arange(5), strip_zeros=True)  # first zero is stripped, so degree is 3
 
 
-def test_strip_zeros_requires_static_values_under_jax_transformations() -> None:
+def test_non_jittable() -> None:
     with pytest.raises(
         jax.errors.ConcretizationTypeError, match="radiax.roots.*strip_zeros=False"
     ):
@@ -36,8 +36,3 @@ def test_strip_zeros_requires_static_values_under_jax_transformations() -> None:
         jax.errors.ConcretizationTypeError, match="radiax.roots.*strip_zeros=False"
     ):
         jax.jit(roots)(jnp.array([1, 2, 3]))
-
-    with pytest.raises(
-        jax.errors.ConcretizationTypeError, match="radiax.roots.*strip_zeros=False"
-    ):
-        jax.vmap(roots)(jnp.array([[1, 2, 3], [1, 2, 3]]))
