@@ -1,5 +1,8 @@
+import itertools
+
 import jax
 import jax.numpy as jnp
+import numpy as np
 import pytest
 
 from radiax import roots
@@ -13,6 +16,17 @@ def _implicit_jacobian(p: jax.Array, r: jax.Array) -> jax.Array:
     return -(r[:, None] ** powers[None, :]) / derivative[:, None]
 
 
+def _match_to_reference(reference: jax.Array, candidate: jax.Array) -> jax.Array:
+    reference_np = np.asarray(reference)
+    candidate_np = np.asarray(candidate)
+    permutations = itertools.permutations(range(reference_np.size))
+    permutation = min(
+        permutations,
+        key=lambda indices: np.linalg.norm(candidate_np[list(indices)] - reference_np),
+    )
+    return jnp.asarray(candidate_np[list(permutation)])
+
+
 REAL_POLYNOMIALS = [
     jnp.array([2.0, -8.0], dtype=jnp.float64),
     jnp.array([1.0, -1.0, -6.0], dtype=jnp.float64),
@@ -23,7 +37,6 @@ REAL_POLYNOMIALS = [
 @pytest.mark.parametrize("p", REAL_POLYNOMIALS)
 def test_jvp_matches_implicit_derivative(p: jax.Array) -> None:
     dp = 0.1 * jnp.arange(1, p.size + 1, dtype=p.dtype)
-
     r, dr = jax.jvp(
         lambda q: roots(q, strip_zeros=False, real=True),
         (p,),
@@ -52,7 +65,6 @@ def test_grad_matches_implicit_derivative(p: jax.Array) -> None:
 def test_cubic_complex_output_jvp_matches_implicit_derivative() -> None:
     p = jnp.array([1.0, 0.0, 0.0, 1.0], dtype=jnp.float64)
     dp = jnp.array([0.2, -0.3, 0.4, -0.5], dtype=jnp.float64)
-
     r, dr = jax.jvp(
         lambda q: roots(q, strip_zeros=False),
         (p,),
@@ -80,7 +92,6 @@ def test_genuinely_complex_cubic_jvp_matches_implicit_derivative() -> None:
         (dp,),
     )
     expected = _implicit_jacobian(p, r) @ dp
-
     assert dr == pytest.approx(expected)
 
 
@@ -96,7 +107,6 @@ def test_grad_through_complex_roots_matches_implicit_derivative() -> None:
     expected = 2 * jnp.real(jnp.sum(jnp.conj(r)[:, None] * jacobian, axis=0))
 
     actual = jax.grad(loss)(p)
-
     assert actual == pytest.approx(expected)
 
 
@@ -175,7 +185,6 @@ def test_differentiation_works_under_jit_and_vmap() -> None:
 
     batched_grad = jax.jit(jax.vmap(jax.grad(loss)))
     actual = batched_grad(polynomials)
-
     expected = []
     for p in polynomials:
         r = roots(p, strip_zeros=False, real=True)
@@ -223,3 +232,86 @@ def test_quadratic_real_mode_grad_ignores_nan_placeholders() -> None:
 
     assert value == pytest.approx(0)
     assert derivative == pytest.approx(0)
+
+
+@pytest.mark.parametrize(
+    ("p", "dp", "real", "step"),
+    [
+        (
+            jnp.array([1.0, -3.0, 2.0], dtype=jnp.float64),
+            jnp.array([0.2, -0.3, 0.4], dtype=jnp.float64),
+            True,
+            1e-6,
+        ),
+        (
+            jnp.array([1.0, -1.5, -5.5, 3.0], dtype=jnp.float64),
+            jnp.array([0.2, -0.3, 0.4, -0.5], dtype=jnp.float64),
+            True,
+            1e-6,
+        ),
+        (
+            jnp.poly(
+                jnp.array(
+                    [1.0 + 1.0j, -2.0 + 0.5j, 0.25 - 1.5j],
+                    dtype=jnp.complex128,
+                )
+            ),
+            jnp.array(
+                [0.2 - 0.1j, -0.3 + 0.05j, 0.4 + 0.2j, -0.5 + 0.3j],
+                dtype=jnp.complex128,
+            ),
+            False,
+            1e-6,
+        ),
+    ],
+)
+def test_jvp_matches_central_finite_difference(
+    p: jax.Array, dp: jax.Array, real: bool, step: float
+) -> None:
+    solve = lambda q: roots(q, strip_zeros=False, real=real)
+    r, dr = jax.jvp(solve, (p,), (dp,))
+    r_plus = _match_to_reference(r, solve(p + step * dp))
+    r_minus = _match_to_reference(r, solve(p - step * dp))
+    finite_difference = (r_plus - r_minus) / (2 * step)
+
+    assert dr == pytest.approx(finite_difference, rel=2e-5, abs=2e-7)
+
+
+@pytest.mark.parametrize(
+    "p",
+    [
+        jnp.poly(jnp.array([1.0, 1.0 + 1e-5], dtype=jnp.float64)),
+        jnp.poly(jnp.array([1.0, 1.0 + 1e-5, 3.0], dtype=jnp.float64)),
+        jnp.poly(jnp.array([1.0, 1.0 + 1e-4, 1.0 - 1e-4], dtype=jnp.float64)),
+    ],
+)
+def test_near_repeated_root_jvp_remains_finite_and_implicit(p: jax.Array) -> None:
+    dp = 0.1 * jnp.arange(1, p.size + 1, dtype=p.dtype)
+    r, dr = jax.jvp(
+        lambda q: roots(q, strip_zeros=False, real=True),
+        (p,),
+        (dp,),
+    )
+    expected = _implicit_jacobian(p, r) @ dp
+
+    assert jnp.all(jnp.isfinite(dr))
+    assert dr == pytest.approx(expected, rel=2e-5, abs=2e-7)
+
+
+@pytest.mark.parametrize(
+    "p",
+    [
+        jnp.array([1.0, -2.0, 1.0], dtype=jnp.float64),
+        jnp.array([1.0, -5.0, 7.0, -3.0], dtype=jnp.float64),
+        jnp.array([1.0, -3.0, 3.0, -1.0], dtype=jnp.float64),
+    ],
+)
+def test_exact_repeated_roots_have_singular_root_derivatives(p: jax.Array) -> None:
+    dp = jnp.arange(1, p.size + 1, dtype=p.dtype)
+    _, dr = jax.jvp(
+        lambda q: roots(q, strip_zeros=False, real=True),
+        (p,),
+        (dp,),
+    )
+
+    assert jnp.any(~jnp.isfinite(dr))
