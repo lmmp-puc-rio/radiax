@@ -23,4 +23,4 @@ def test_speedup():
     vmapped_radiax_roots(RANDOM_CUBICS).block_until_ready()
     time_radiax = time.perf_counter() - start
 
-    assert time_radiax < 0.5 * time_jnp
+    assert time_radiax < 0.15 * time_jnp
