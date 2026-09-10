@@ -3,6 +3,20 @@ import jax.numpy as jnp
 import pytest
 
 from radiax import roots
+from tests.utils import assert_roots_match
+
+
+def _cubic_from_roots(r: jax.Array) -> jax.Array:
+    r0, r1, r2 = r
+    return jnp.array(
+        [
+            1,
+            -(r0 + r1 + r2),
+            r0 * r1 + r0 * r2 + r1 * r2,
+            -r0 * r1 * r2,
+        ],
+        dtype=r.dtype,
+    )
 
 
 def _normalized_residual(p: jax.Array, r: jax.Array) -> jax.Array:
@@ -137,3 +151,167 @@ def test_genuinely_complex_cubic_multiscale_roots() -> None:
     r = roots(p)
 
     assert _normalized_residual(p, r) == pytest.approx(0, abs=1e-7)
+
+
+@pytest.mark.parametrize("dtype", [jnp.float32, jnp.float64])
+@pytest.mark.parametrize("real", [False, True])
+def test_cubic_monic_normalization_does_not_overflow(
+    dtype: jnp.dtype, real: bool
+) -> None:
+    finfo = jnp.finfo(dtype)
+    leading = jnp.asarray(1.25, dtype=dtype) * finfo.tiny
+    middle = jnp.asarray(8.0, dtype=dtype)
+    p = jnp.array([leading, 0, -middle, 0], dtype=dtype)
+
+    log_expected = 0.5 * (jnp.log(middle) - jnp.log(leading))
+    expected_magnitude = jnp.exp(log_expected)
+    expected = jnp.array([-expected_magnitude, 0, expected_magnitude], dtype=dtype)
+
+    r = roots(p, strip_zeros=False, real=real)
+    actual = jnp.sort(r if real else r.real)
+
+    assert jnp.all(jnp.isfinite(r))
+    assert actual == pytest.approx(
+        expected, rel=5e-6 if dtype == jnp.float32 else 1e-12
+    )
+    if not real:
+        assert r.imag == pytest.approx(0)
+
+
+@pytest.mark.parametrize("scale", [1e-200, 1.0, 1e200])
+@pytest.mark.parametrize("real", [False, True])
+def test_cubic_scale_invariance_over_400_orders(scale: float, real: bool) -> None:
+    p = jnp.asarray(scale, dtype=jnp.float64) * jnp.array(
+        [1.0, -6.0, 11.0, -6.0], dtype=jnp.float64
+    )
+    r = roots(p, strip_zeros=False, real=real)
+
+    actual = jnp.sort(r if real else r.real)
+    assert actual == pytest.approx([1.0, 2.0, 3.0])
+    if not real:
+        assert r.imag == pytest.approx(0)
+
+
+@pytest.mark.parametrize(
+    ("p", "expected"),
+    [
+        (
+            jnp.array([1e-200, 0.0, -1e100, 0.0], dtype=jnp.float64),
+            jnp.array([-1e150, 0.0, 1e150], dtype=jnp.float64),
+        ),
+        (
+            jnp.array([1e100, 0.0, -1e-100, 0.0], dtype=jnp.float64),
+            jnp.array([-1e-100, 0.0, 1e-100], dtype=jnp.float64),
+        ),
+        (
+            jnp.array([1e-120, -1e80, 0.0, 0.0], dtype=jnp.float64),
+            jnp.array([0.0, 0.0, 1e200], dtype=jnp.float64),
+        ),
+    ],
+)
+def test_cubic_extreme_coefficient_dynamic_range(
+    p: jax.Array, expected: jax.Array
+) -> None:
+    r = roots(p, strip_zeros=False)
+
+    assert jnp.all(jnp.isfinite(r))
+    assert_roots_match(r, expected.astype(r.dtype), abs=1e-12, rel=2e-10)
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [
+        jnp.array([1.0, 1.0 + 1e-6, 3.0], dtype=jnp.float64),
+        jnp.array([1.0, 1.0 + 1e-8, 1.0 - 1e-8], dtype=jnp.float64),
+        jnp.array([-1e8, 1e-8, 2.0], dtype=jnp.float64),
+        jnp.array([-1e-8, 1e-8, 1e8], dtype=jnp.float64),
+    ],
+)
+def test_adversarial_real_root_configurations(expected: jax.Array) -> None:
+    p = _cubic_from_roots(expected)
+    r = roots(p, strip_zeros=False)
+
+    assert_roots_match(r, expected.astype(r.dtype), abs=2e-7, rel=2e-7)
+    assert _normalized_residual(p, r) == pytest.approx(0, abs=2e-14)
+
+
+@pytest.mark.parametrize(
+    "expected",
+    [
+        jnp.array([0.0, 1.0, 2.0], dtype=jnp.float64),
+        jnp.array([1e-20, 1.0, 2.0], dtype=jnp.float64),
+        jnp.array([1e-100, -3.0, 4.0], dtype=jnp.float64),
+    ],
+)
+def test_zero_and_almost_zero_constant_terms(expected: jax.Array) -> None:
+    p = _cubic_from_roots(expected)
+    r = roots(p, strip_zeros=False)
+
+    assert_roots_match(r, expected.astype(r.dtype), abs=1e-14, rel=1e-10)
+    assert _normalized_residual(p, r) == pytest.approx(0, abs=1e-14)
+
+
+def test_genuinely_complex_near_double_root() -> None:
+    expected = jnp.array(
+        [1.0 + 1.0j, 1.0 + 1.0j + 1e-7, -2.0 + 0.5j],
+        dtype=jnp.complex128,
+    )
+    p = _cubic_from_roots(expected)
+    r = roots(p, strip_zeros=False)
+
+    assert_roots_match(r, expected, abs=2e-7, rel=2e-7)
+    assert _normalized_residual(p, r) == pytest.approx(0, abs=2e-14)
+
+
+def test_log_uniform_real_root_fuzz() -> None:
+    key_magnitude, key_sign = jax.random.split(jax.random.key(4312))
+    exponents = jax.random.uniform(
+        key_magnitude,
+        (2048, 3),
+        minval=-8.0,
+        maxval=8.0,
+        dtype=jnp.float64,
+    )
+    signs = jnp.where(
+        jax.random.bernoulli(key_sign, shape=(2048, 3)),
+        1.0,
+        -1.0,
+    )
+    expected = signs * 10**exponents
+    polynomials = jax.vmap(_cubic_from_roots)(expected)
+    actual = jax.jit(jax.vmap(lambda p: roots(p, strip_zeros=False)))(polynomials)
+
+    residuals = jax.vmap(_normalized_residual)(polynomials, actual)
+    assert jnp.all(jnp.isfinite(actual))
+    assert residuals == pytest.approx(0, abs=2e-13)
+
+    assert_roots_match(actual, expected, abs=1e-8, rel=2e-8)
+
+
+def test_log_uniform_complex_root_fuzz() -> None:
+    key = jax.random.key(9271)
+    keys = jax.random.split(key, 4)
+    log_magnitudes = jax.random.uniform(
+        keys[0],
+        (1024, 3),
+        minval=-6.0,
+        maxval=6.0,
+        dtype=jnp.float64,
+    )
+    phases = jax.random.uniform(
+        keys[1],
+        (1024, 3),
+        minval=-jnp.pi,
+        maxval=jnp.pi,
+        dtype=jnp.float64,
+    )
+    magnitudes = 10**log_magnitudes
+    expected = magnitudes * jnp.exp(1j * phases)
+    polynomials = jax.vmap(_cubic_from_roots)(expected.astype(jnp.complex128))
+    actual = jax.jit(jax.vmap(lambda p: roots(p, strip_zeros=False)))(polynomials)
+
+    residuals = jax.vmap(_normalized_residual)(polynomials, actual)
+    assert jnp.all(jnp.isfinite(actual))
+    assert residuals == pytest.approx(0, abs=5e-13)
+
+    assert_roots_match(actual, expected, abs=2e-8, rel=5e-8)
