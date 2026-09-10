@@ -4,7 +4,7 @@ build-backend = "uv_build"
 
 [project]
 name = "radiax"
-version = "0.1.2"
+version = "0.1.3"
 license = "Apache-2.0"
 authors = [{ name = "Gabriel S. Gerlero", email = "gerlero@lmmp.mec.puc-rio.br" }]
 description = "Analytic polynomial roots with JAX"
