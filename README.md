@@ -18,7 +18,7 @@
 
 ## Overview
 
-`radiax.roots` is a drop-in replacement for [`jax.numpy.roots`](https://docs.jax.dev/en/latest/_autosummary/jax.numpy.roots.html) for polynomials of up to the third degree<sup>1</sup>. It is fully analytic, with support for complex roots and coefficients. It is [JIT](https://docs.jax.dev/en/latest/_autosummary/jax.jit.html)-compatible<sup>2</sup> and has been benchmarked to be around 5x faster than `jax.numpy.roots` for cubic polynomials<sup>3</sup>.
+`radiax.roots` is a drop-in replacement for [`jax.numpy.roots`](https://docs.jax.dev/en/latest/_autosummary/jax.numpy.roots.html) for polynomials of up to the third degree<sup>1</sup>. It is fully analytic, with support for complex roots and coefficients. It is [JIT](https://docs.jax.dev/en/latest/_autosummary/jax.jit.html)-compatible<sup>2</sup> and has been benchmarked to be around 20x faster than `jax.numpy.roots` for cubic polynomials<sup>3</sup>.
 
 ## Installation
 
@@ -46,7 +46,7 @@ print(r)
 
 <sup>2</sup> Just like with [`jax.numpy.roots`](https://docs.jax.dev/en/latest/_autosummary/jax.numpy.roots.html), the optional keyword argument `strip_zeros` must be set to `False` for JIT-compatibility.
 
-<sup>3</sup> **radiax** 0.1.2 running on an Intel Core i7-14700 CPU (JAX 0.11.1, Python 3.14.7, Ubuntu 24.04.5).
+<sup>3</sup> **radiax** 0.1.3 running on an Intel Core i7-14700 CPU (JAX 0.11.1, Python 3.14.7, Ubuntu 24.04.5).
 
 ---
 
