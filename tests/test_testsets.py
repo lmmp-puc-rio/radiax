@@ -47,14 +47,13 @@ def test_known_vs_jnp(
 
 
 def test_random_jnp_polyval() -> None:
-    vmapped_roots = jax.jit(jax.vmap(lambda p: jnp.roots(p, strip_zeros=False)))(
-        RANDOM_CUBICS
-    )
-    assert isinstance(vmapped_roots, jax.Array)
-    assert vmapped_roots.dtype == complex
+    rs = jax.jit(jax.vmap(lambda p: jnp.roots(p, strip_zeros=False)))(RANDOM_CUBICS)
+    assert isinstance(rs, jax.Array)
+    assert rs.dtype == complex
 
-    vmapped_polyval = jax.jit(jax.vmap(jnp.polyval))(RANDOM_CUBICS, vmapped_roots)
-    assert isinstance(vmapped_polyval, jax.Array)
-    assert vmapped_polyval.dtype == complex
+    ys = jax.jit(jax.vmap(jnp.polyval))(RANDOM_CUBICS, rs)
+    assert isinstance(ys, jax.Array)
+    assert ys.dtype == complex
+    assert ys.shape == (RANDOM_CUBICS.shape[0], 3)
 
-    assert vmapped_polyval == pytest.approx(0, abs=1e-11)
+    assert ys == pytest.approx(0, abs=1e-11)

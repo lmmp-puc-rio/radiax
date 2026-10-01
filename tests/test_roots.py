@@ -84,17 +84,15 @@ def test_complex_double_root() -> None:
 
 @pytest.mark.parametrize("real", [False, True])
 def test_random_vs_jnp(real: bool) -> None:
-    vmapped_jnp_roots = jax.jit(jax.vmap(lambda p: jnp.roots(p, strip_zeros=False)))(
-        RANDOM_CUBICS
-    )
+    jnp_rs = jax.jit(jax.vmap(lambda p: jnp.roots(p, strip_zeros=False)))(RANDOM_CUBICS)
 
-    assert isinstance(vmapped_jnp_roots, jax.Array)
-    assert vmapped_jnp_roots.dtype == complex
+    assert isinstance(jnp_rs, jax.Array)
+    assert jnp_rs.dtype == complex
+    assert jnp_rs.shape == (RANDOM_CUBICS.shape[0], 3)
 
-    vmapped_roots = jax.jit(jax.vmap(lambda p: roots(p, strip_zeros=False, real=real)))(
-        RANDOM_CUBICS
-    )
-    assert isinstance(vmapped_roots, jax.Array)
-    assert vmapped_roots.dtype == (float if real else complex)
+    rs = roots(RANDOM_CUBICS, strip_zeros=False, real=real)
+    assert isinstance(rs, jax.Array)
+    assert rs.dtype == (float if real else complex)
+    assert rs.shape == (RANDOM_CUBICS.shape[0], 3)
 
-    assert_roots_match(vmapped_roots, vmapped_jnp_roots, abs=1e-6, rel=1e-3)
+    assert_roots_match(rs, jnp_rs, abs=1e-6, rel=1e-3)
