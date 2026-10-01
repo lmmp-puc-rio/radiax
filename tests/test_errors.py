@@ -9,8 +9,11 @@ def test_invalid_inputs() -> None:
     with pytest.raises(TypeError):
         roots([1, 2, 3])  # ty: ignore[invalid-argument-type]
 
-    with pytest.raises(ValueError, match="1D"):
+    with pytest.raises(ValueError, match="strip_zeros.*1D"):
         roots(jnp.array([[1, 2], [3, 4]]))
+
+    with pytest.raises(ValueError, match="1D"):
+        roots(jnp.array(0), strip_zeros=False)
 
     with pytest.raises(TypeError):
         roots(jnp.array([1 + 1j, 2 + 2j]), real=True)

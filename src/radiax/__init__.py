@@ -2,6 +2,7 @@ import jax
 import jax.core
 import jax.numpy as jnp
 import numpy as np
+from parajax import vectorize
 
 
 def _roots_linear(p: jax.Array, /) -> jax.Array:
@@ -119,6 +120,7 @@ def _roots_no_zeros(p: jax.Array, /) -> jax.Array:
 
 
 @jax.jit
+@vectorize(ndim=1)
 def _roots_with_zeros(p: jax.Array, /) -> jax.Array:
     match p.size:
         case 2:
@@ -140,8 +142,6 @@ def roots(
 ) -> jax.Array:
     if not isinstance(p, (jax.Array, np.ndarray)):
         raise TypeError(f"p must be a jax.Array or np.ndarray; got type {type(p)}")
-    if p.ndim != 1:
-        raise ValueError(f"p must be a 1D array; got shape {p.shape}")
 
     if real:
         if jnp.issubdtype(p.dtype, jnp.complexfloating):
@@ -150,6 +150,11 @@ def roots(
         p = p.astype(jnp.complex128 if p.dtype.itemsize > 4 else jnp.complex64)
 
     if strip_zeros:
+        if p.ndim != 1:
+            raise ValueError(
+                f"with strip_zeros=True, p must be a 1D array; got shape {p.shape}"
+            )
+
         try:
             p = jnp.trim_zeros(p, trim="f")
         except jax.errors.ConcretizationTypeError as e:
@@ -161,4 +166,7 @@ def roots(
             raise
         return _roots_no_zeros(p)
     else:
+        if p.ndim < 1:
+            raise ValueError(f"p must be at least 1D; got shape {p.shape}")
+
         return _roots_with_zeros(p)
