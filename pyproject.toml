@@ -31,7 +31,7 @@ dependencies = [
 ]
 
 [dependency-groups]
-lint = ["ruff>=0.16.5,<0.17"]
+lint = ["ruff>=0.16.5,<0.18"]
 typing = ["ty>=0.0.76,<0.1"]
 test = [
     "numpy>=1,<3",
