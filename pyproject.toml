@@ -26,7 +26,7 @@ classifiers = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "jax>=0.8,<0.12",
+    "jax>=0.8,<0.13",
     "parajax>=0.4,<0.5",
 ]
 
